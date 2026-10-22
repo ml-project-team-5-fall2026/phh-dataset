@@ -1174,70 +1174,7 @@ winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
 
-[57]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:22:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['c4wZX/9ke5CiPbAUtso9ew', 'T9EYtiFR3DNThJKpXxLN3Q']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
 [58]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:22:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['T9EYtiFR3DNThJKpXxLN3Q', 'c4wZX/9ke5CiPbAUtso9ew']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[59]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:22:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['c4wZX/9ke5CiPbAUtso9ew', 'T9EYtiFR3DNThJKpXxLN3Q']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[60]
 variant = 'NT'
 ante_trimming_status = false
 antes = [0, 0]
@@ -2539,69 +2476,6 @@ winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
 
-[122]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 cbr 8', 'p1 f']
-venue = 'iPoker Network'
-time = 12:24:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['T9EYtiFR3DNThJKpXxLN3Q', '6iOfb+TEebAR/WgEVvTOzQ']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[123]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:24:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['6iOfb+TEebAR/WgEVvTOzQ', 'T9EYtiFR3DNThJKpXxLN3Q']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[124]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:24:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['T9EYtiFR3DNThJKpXxLN3Q', '6iOfb+TEebAR/WgEVvTOzQ']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
 [125]
 variant = 'NT'
 ante_trimming_status = false
@@ -3883,27 +3757,6 @@ winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
 
-[186]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:26:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['T9EYtiFR3DNThJKpXxLN3Q', 'NNAk9YVwXO6OXD9HaGwVSw']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
 [187]
 variant = 'NT'
 ante_trimming_status = false
@@ -4005,27 +3858,6 @@ hand = 3494361390
 seats = [2, 1]
 table = 'HandHQ'
 players = ['T9EYtiFR3DNThJKpXxLN3Q', '6iOfb+TEebAR/WgEVvTOzQ']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[192]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:26:34
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['6iOfb+TEebAR/WgEVvTOzQ', 'T9EYtiFR3DNThJKpXxLN3Q']
 winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
@@ -4408,91 +4240,7 @@ winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
 
-[211]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['qcpQkf4rMwDorlU9OG24DQ', 'FUXX2rnDwKIChHKYVG64uA']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
 [212]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['FUXX2rnDwKIChHKYVG64uA', 'qcpQkf4rMwDorlU9OG24DQ']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[213]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['qcpQkf4rMwDorlU9OG24DQ', 'FUXX2rnDwKIChHKYVG64uA']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[214]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['FUXX2rnDwKIChHKYVG64uA', 'qcpQkf4rMwDorlU9OG24DQ']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[215]
 variant = 'NT'
 ante_trimming_status = false
 antes = [0, 0]
@@ -4635,27 +4383,6 @@ hand = 3494361390
 seats = [2, 1]
 table = 'HandHQ'
 players = ['FUXX2rnDwKIChHKYVG64uA', 'neTcc+r3jEgMRWdfDCDKqA']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[222]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [2, 4]
-min_bet = 4
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 1]
-table = 'HandHQ'
-players = ['neTcc+r3jEgMRWdfDCDKqA', 'FUXX2rnDwKIChHKYVG64uA']
 winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
@@ -5013,27 +4740,6 @@ hand = 3494361390
 seats = [2, 3, 1]
 table = 'HandHQ'
 players = ['qcpQkf4rMwDorlU9OG24DQ', 'e4AEVH/815q0e88RB+yGsQ', 'FUXX2rnDwKIChHKYVG64uA']
-winnings = [0, 0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
-[240]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0, 0]
-blinds_or_straddles = [2, 4, 0]
-min_bet = 4
-starting_stacks = [inf, inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'd dh p3 ????', 'p3 f', 'p1 f']
-venue = 'iPoker Network'
-time = 12:27:08
-day = 25
-month = 7
-year = 2009
-hand = 3494361390
-seats = [2, 3, 1]
-table = 'HandHQ'
-players = ['e4AEVH/815q0e88RB+yGsQ', 'FUXX2rnDwKIChHKYVG64uA', 'qcpQkf4rMwDorlU9OG24DQ']
 winnings = [0, 0, 0]
 currency = 'USD'
 currency_symbol = '$'

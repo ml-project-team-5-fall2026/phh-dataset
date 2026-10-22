@@ -13732,27 +13732,6 @@ winnings = [0, 0]
 currency = 'USD'
 currency_symbol = '$'
 
-[655]
-variant = 'NT'
-ante_trimming_status = false
-antes = [0, 0]
-blinds_or_straddles = [5, 10]
-min_bet = 10
-starting_stacks = [inf, inf]
-actions = ['d dh p1 ????', 'd dh p2 ????', 'p2 cbr 30', 'p1 f']
-venue = 'iPoker Network'
-time = 10:03:18
-day = 1
-month = 7
-year = 2009
-hand = 3406959394
-seats = [2, 1]
-table = 'HandHQ'
-players = ['NmVnnS8pZWfFCoDgGNgG3A', 'gal+hqCD85WuWcxWE3ybng']
-winnings = [0, 0]
-currency = 'USD'
-currency_symbol = '$'
-
 [656]
 variant = 'NT'
 ante_trimming_status = false
