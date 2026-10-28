@@ -7,6 +7,10 @@ Ensure dependencies are installed:
 
 > pip install -r requirements.txt
 
+Or if you are in the Coursera environment:
+
+> pip install -r requirements_coursera.txt
+
 ## Data Cleaning/Scripts
 
 phh_to_parquet.py to generate a database format more compatible with Python/Pandas, basic usage is:

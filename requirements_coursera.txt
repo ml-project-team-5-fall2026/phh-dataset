@@ -1,0 +1,2 @@
+pokerkit~=0.4.11
+pyarrow>=14
