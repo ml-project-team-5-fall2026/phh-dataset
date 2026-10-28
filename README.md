@@ -3,6 +3,11 @@ Modified version of the poker hand histories from Juho Kim for our machine learn
 
 # Usage
 
+Ensure you are in a venv:
+
+> python3 -m venv .venv
+> source .venv/bin/activate
+
 Ensure dependencies are installed:
 
 > pip install -r requirements.txt
