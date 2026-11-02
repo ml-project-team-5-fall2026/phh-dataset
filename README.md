@@ -20,7 +20,7 @@ Or if you are in the Coursera environment:
 
 phh_to_parquet.py to generate a database format more compatible with Python/Pandas, basic usage is:
 
-> ./scripts/phh_to_parquet.py --data_path data/
+> ./scripts/phh_to_parquet.py --data_path data/ --workers 1
 
 ---
 
