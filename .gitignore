@@ -1,3 +1,4 @@
+# mostly generated template gitignore
 # parquet directory
 parquet/**
 
