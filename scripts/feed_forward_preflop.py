@@ -14,6 +14,23 @@ Basic usage:
     ./scripts/feed_forward_preflop.py
 """
 
+##### other TODOs ####################
+# TODO: not attached to any one part of the code, just improvements to make:
+# Infer hidden cards based on current representation distributions and what action the player took for better training quality.
+#     most significantly, need to unroll the unknown's fold rates back into the weaker hands
+#
+# Use an alternative hand encoding that better represents how strong the hands are sensitive to how people play them.
+#     lets the model learn card strengths based on how people play rather than the mathematical significance
+#
+# Use all of the data, stream the rows instead of loading it all into memory.
+#     should make this optional, so we can test with a smaller sample to get the other features implemented first
+#
+# Include player IDs into the decisions/ table and model learning
+#     think this would be useful as a PoC that it can adapt to new players/data with non-traditional behavior
+#
+# From Surja: More hidden layers & epochs
+######################################
+
 # std libs
 import sys
 import random
@@ -41,7 +58,7 @@ def get_args():
     parser = ArgumentParser(description=__doc__)
 
     parser.add_argument("--data_path", type = Path, help = "path to the decisions parquet table", default = "parquet/decisions")
-    parser.add_argument("--max_rows", type = int, help = "pre-flop rows to load", default = 10000000) # TODO: remove for final model
+    parser.add_argument("--max_rows", type = int, help = "pre-flop rows to load", default = 10000000) # TODO: change to optional for final model
     parser.add_argument("--epochs", type = int, help = "dataset iterations", default = 3)
     parser.add_argument("--threads", type = int, help = "torch threads", default = 2) # 2 seems to be safe on the VMs
 
