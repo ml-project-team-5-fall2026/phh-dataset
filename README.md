@@ -20,7 +20,7 @@ Or if you are in the Coursera environment:
 
 phh_to_parquet.py to generate a database format more compatible with Python/Pandas, basic usage is:
 
-> ./scripts/phh_to_parquet.py --data_path data/
+> ./scripts/phh_to_parquet.py --data_path data/ --workers 1
 
 ---
 
@@ -30,3 +30,15 @@ metrics.py to retrieve statistics on the contents of the database, basic usage i
 
 Can also run on `--data_path parquet/` if it was generated.
 
+
+---
+
+train_preflop.py to train a torch network that predicts pre-flop actions (fold, call, raise) from the Parquet decisions table, basic usage is:
+
+> ./scripts/train_preflop.py --data_path parquet/decisions
+
+If you don't have an NVIDIA GPU, install the smaller CPU-only torch build first:
+
+> pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+Can change `/cpu` to `/xpu` if you have decent integrated graphics.
