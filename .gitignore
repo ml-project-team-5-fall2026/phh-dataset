@@ -1,3 +1,7 @@
+# mostly generated template gitignore
+# parquet directory
+parquet/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
