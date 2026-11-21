@@ -52,7 +52,7 @@ import pyarrow.parquet as pq
 ACTION_NAMES = ["fold", "call", "raise"]
 COLUMNS = ["hand_id", "seat", "n_players", "n_active", "big_blind", "pot", "to_call", "stack", "n_raises", "hole1", "hole2", "action"]
 
-# pylint: disable=no-member; pylint having issues validating is_finite for whatever reason, wrapping it in an exclusion
+# pylint: disable=no-member; pylint has issues finding many of the c++ bindings
 # pre-flop only, and validate potentially bad rows
 ROW_FILTERS = (
     (pc.field("street") == 0) &
@@ -78,8 +78,8 @@ def get_args():
 
     return parser.parse_args()
 
-def stream_preflop(data_path, max_rows = None, batch_size = 65536, seed = 0):
-    """ Reads pre-flop data in batches and yields segments """
+def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed = 0):
+    """ Reads pre-flop data in batches and yields filtered Arrow tables """
 
     n_rows = 0
     files = sorted(data_path.rglob("*.parquet"))
@@ -91,7 +91,7 @@ def stream_preflop(data_path, max_rows = None, batch_size = 65536, seed = 0):
         parquet_file = pq.ParquetFile(path)
         for batch in parquet_file.iter_batches(
             batch_size=batch_size,
-            columns=COLUMNS + ["street"] # adding street for pre-flop filtering
+            columns=COLUMNS + ["street", "player_id"] # adding street for pre-flop filtering
         ):
             table = pa.Table.from_batches([batch])
             table = table.filter(ROW_FILTERS)
@@ -108,23 +108,54 @@ def stream_preflop(data_path, max_rows = None, batch_size = 65536, seed = 0):
 
                 table = table.slice(0, remaining)
 
-            # Convert the current batch to PyTorch tensors
-            columns = {
-                column: torch.tensor(table[column].to_numpy()) for column in COLUMNS
-            }
-
             # Count only the rows we're actually yielding.
             n_rows += table.num_rows
 
-            # Send the batch to the training code.
-            yield columns
+            yield table
 
             # Stop once the requested row limit is reached.
             if max_rows is not None and n_rows >= max_rows:
                 return
 
 
-def walk_training_dataset(data_path, max_rows, section_rows, seed):
+def build_player_lookup(data_path, max_rows, seed):
+    """ Sorted Arrow array of player IDs seen in training rows only, so test players can't leak into the vocabulary """
+
+    players = set()
+    for table in stream_preflop_tables(data_path, max_rows, seed = seed):
+        train_subset = pa.array(table["hand_id"].to_numpy() % 10 != 0)
+        players.update(pc.unique(table["player_id"].filter(train_subset)).to_pylist()) #pylint: disable=no-member
+
+    players.discard(None)
+
+    return pa.array(sorted(players), type = pa.string())
+
+
+def stream_preflop(data_path, player_lookup, max_rows = None, batch_size = 65536, seed = 0):
+    """ Yields pre-flop batches as column -> tensor dicts, with players encoded by player_lookup """
+
+    for table in stream_preflop_tables(data_path, max_rows, batch_size, seed):
+        # Convert the current batch to PyTorch tensors
+        columns = {
+            column: torch.tensor(table[column].to_numpy()) for column in COLUMNS
+        }
+
+        # index_in() is null for players outside the vocabulary; shifting by 1 makes those index 0 (unknown)
+        # pylint: disable=no-member
+        player_id = pc.add(
+            pc.fill_null(
+                pc.index_in(table["player_id"], value_set = player_lookup), -1
+            ), 1
+        )
+        # pylint: enable=no-member
+
+        columns["player_id"] = torch.tensor(player_id.to_numpy())
+
+        # Send the batch to the training code.
+        yield columns
+
+
+def walk_training_dataset(data_path, player_lookup, max_rows, section_rows, seed):
     """
     Groups streamed batches into larger sections for better randomization in training.
     Inobvious here as to why, but it's relevant for the training `randperm()` call.
@@ -133,7 +164,7 @@ def walk_training_dataset(data_path, max_rows, section_rows, seed):
     batches = []
     n_rows = 0
 
-    for columns in stream_preflop(data_path, max_rows, seed = seed):
+    for columns in stream_preflop(data_path, player_lookup, max_rows, seed = seed):
         batches.append(columns)
         n_rows += len(columns["action"])
 
@@ -150,7 +181,7 @@ def walk_training_dataset(data_path, max_rows, section_rows, seed):
 def merge_section(batches):
     """ Concatenates a list of column -> tensor batches into a single column -> tensor section """
     resolved_section = {}
-    for column in COLUMNS:
+    for column in COLUMNS + ["player_id"]:
         column_batches = []
         for batch in batches:
             column_batches.append(batch[column])
@@ -208,6 +239,14 @@ def make_features(columns):
     ], dim = 1)
 
 
+def add_player_features(features, player_id, n_players):
+    """ concats one-hot player columns """
+
+    # TODO: One-hot doesn't work with the full dataset, probably need a torch Embedding
+    player_one_hot = torch.nn.functional.one_hot(player_id.long(), num_classes = n_players).float() # pylint: disable=not-callable
+    return torch.cat((features, player_one_hot), dim = 1)
+
+
 def print_example_hands(model):
     """ Sanity check/hand samples: first to act in a 6 player game, nobody has raised, 100 big blind stacks """
 
@@ -238,7 +277,10 @@ def print_example_hands(model):
     }
 
     with torch.no_grad():
-        probablities = model(make_features(columns)).softmax(dim = 1)
+        # all sample hands belong to the unknown player (index 0)
+        sample_features = make_features(columns)
+        n_players = model[0].in_features - sample_features.shape[1]
+        probablities = model(add_player_features(sample_features, torch.zeros(n), n_players)).softmax(dim = 1)
 
     print("\nSelect hands sample")
     print(f"\t{"hand":<5}" + "".join(f"{action:>8}" for action in ACTION_NAMES))
@@ -255,10 +297,16 @@ def main():
     torch.manual_seed(0) # fixed for now, could probably be an arg
     torch.set_num_threads(args.threads)
 
+    player_lookup = build_player_lookup(args.data_path, args.max_rows, args.seed)
+    print(f"# training players: {len(player_lookup):,}")
+
+    # + 1 reserves index 0 for unknown/unseen players
+    n_players = len(player_lookup) + 1
+
     # Sequential for linear cxts - https://docs.pytorch.org/docs/2.15/generated/torch.nn.Sequential.html
     model = torch.nn.Sequential(
-        torch.nn.Linear(len(COLUMNS), 64),
-        torch.nn.ReLU(), # pretty much just using the most common features (which the baove source uses), ReLU happens to be suitable for this application
+        torch.nn.Linear(len(COLUMNS) + n_players, 64),
+        torch.nn.ReLU(), # pretty much just using the most common features (which the above source uses), ReLU happens to be suitable for this application
         torch.nn.Linear(64, 64),
         torch.nn.ReLU(),
         torch.nn.Linear(64, len(ACTION_NAMES)),
@@ -269,19 +317,21 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
 
     for epoch in range(args.epochs):
-        for columns in walk_training_dataset(args.data_path, args.max_rows, args.section_rows, args.seed):
+        for columns in walk_training_dataset(args.data_path, player_lookup, args.max_rows, args.section_rows, args.seed):
             # keeping a subset for training only, inverse logic done later for testing so we can use the same row boundaries
             train_subset = columns["hand_id"] % 10 != 0
             if not train_subset.any():
                 continue
 
             train_in = make_features(columns)[train_subset]
+            train_players = columns["player_id"][train_subset]
             train_target = columns["action"][train_subset].long() # cross_entropy() requires long/byte, fails without
 
             # TODO: re-evaluate how many steps to split into once we ingest the full dataset, probably needs to be a function of N
             #     (Cole)
             for index in torch.randperm(len(train_target)).split(4000):
-                loss = torch.nn.functional.cross_entropy(model(train_in[index]), train_target[index])
+                batch_in = add_player_features(train_in[index], train_players[index], n_players)
+                loss = torch.nn.functional.cross_entropy(model(batch_in), train_target[index])
                 optimizer.zero_grad()
                 loss.backward() # backprop
                 optimizer.step()
@@ -293,13 +343,20 @@ def main():
     total_counts = hit_counts.copy()
 
     with torch.no_grad(): # can more or less use no_grad() for all testing since we don't need to do backprop
-        for columns in stream_preflop(args.data_path, args.max_rows, seed = args.seed):
+        for columns in stream_preflop(args.data_path, player_lookup, args.max_rows, seed = args.seed):
             test_subset = columns["hand_id"] % 10 == 0
             if not test_subset.any():
                 continue
 
             test = {column: values[test_subset] for column, values in columns.items()}
-            correct = model(make_features(test)).argmax(dim = 1) == test["action"].long()
+            test_in = make_features(test)
+
+            predictions = torch.cat([
+                model(add_player_features(test_in[index], test["player_id"][index], n_players)).argmax(dim = 1)
+                for index in torch.arange(len(test_in)).split(4000)
+            ])
+
+            correct = predictions == test["action"].long()
             known = test["hole1"] >= 0 # -1 indicates unknown
 
             # metrics
