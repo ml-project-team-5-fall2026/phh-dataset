@@ -89,6 +89,7 @@ EMPTY_HAND = {
     "min_bet": None,
     "starting_stacks": [],
     "actions": [],
+    "players": [],
     "winnings": None
 }
 
@@ -103,12 +104,14 @@ HANDS_PQ_SCHEMA = pa.schema([
     ("min_bet", pa.float64()),
     ("starting_stacks", pa.list_(pa.float64())),
     ("actions", pa.list_(pa.string())),
+    ("players", pa.list_(pa.string())),
     ("winnings", pa.list_(pa.float64())),
 ])
 DECISIONS_PQ_SCHEMA = pa.schema([
     ("hand_id", pa.int64()),
     ("street", pa.int8()),
     ("seat", pa.int8()),
+    ("player_id", pa.string()),
     ("n_players", pa.int8()),
     ("n_active", pa.int8()),
     ("big_blind", pa.float32()),
@@ -140,7 +143,7 @@ def get_args():
 
 def parse_field(category, data):
     """ Resolves category cases for additional processing. """
-    if category == "actions": # split each event action into a python list
+    if category in ("actions", "players"): # split each event action into a python list
         return ACTION_EVENT_PATTERN.findall(data)
 
     if category == "min_bet":
@@ -252,7 +255,7 @@ def hand_to_decisions(hand, hand_id):
 
         # matching the decisions pq schema
         yield (
-            hand_id, street, seat, n_players, n_players - sum(folded),
+            hand_id, street, seat, hand["players"][seat] if seat <len(hand["players"]) else None, n_players, n_players - sum(folded),
             big_blind, pot + sum(bets), to_call, stacks[seat], max(bets),
             n_raises, *(hole_cards.get(seat, [-1, -1])),
             *(board + [-1] * (5 - len(board))), ACTIONS[the_event], amount
