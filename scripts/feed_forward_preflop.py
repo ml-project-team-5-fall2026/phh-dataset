@@ -14,16 +14,6 @@ Basic usage:
     ./scripts/feed_forward_preflop.py
 """
 
-##### other TODOs ####################
-# TODO: not attached to any one part of the code, just improvements to make:
-# Use an alternative hand encoding that better represents how strong the hands are sensitive to how people play them.
-#     lets the model learn card strengths based on how people play rather than the mathematical significance
-#     (Surja)
-#
-# More hidden layers & epochs
-#     (Surja)
-######################################
-
 # std libs
 import sys
 import random
@@ -63,10 +53,11 @@ def get_args():
     parser.add_argument("--epochs", type = int, help = "dataset iterations", default = 3)
     parser.add_argument("--threads", type = int, help = "torch threads", default = 2) # 2 seems to be safe on the VMs
     parser.add_argument("--seed", type = int, help = "randomization seed", default = 0)
+    parser.add_argument("--player_dim", type = int, help = "player embedding size, 0 disables player IDs", default = 16)
 
     return parser.parse_args()
 
-def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed = 0):
+def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed = 0, read_players = True):
     """ Reads pre-flop data in batches and yields filtered Arrow tables """
 
     n_rows = 0
@@ -78,7 +69,7 @@ def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed =
     for path in files:
         dataset = ds.dataset(path, format = "parquet")
         scanner = dataset.scanner(
-            columns = COLUMNS + ["player_id"],
+            columns = COLUMNS + ["player_id"] if read_players else COLUMNS,
             filter = ROW_FILTERS,
             batch_size = batch_size
         )
@@ -122,24 +113,25 @@ def build_player_lookup(data_path, max_rows, seed):
 
 
 def stream_preflop(data_path, player_lookup, max_rows = None, batch_size = 65536, seed = 0):
-    """ Yields pre-flop batches as column -> tensor dicts, with players encoded by player_lookup """
+    """ Yields pre-flop batches as column -> tensor dicts, with players encoded by player_lookup when it's provided """
 
-    for table in stream_preflop_tables(data_path, max_rows, batch_size, seed):
+    for table in stream_preflop_tables(data_path, max_rows, batch_size, seed, read_players = player_lookup is not None):
         # Convert the current batch to PyTorch tensors
         columns = {
             column: torch.tensor(table[column].to_numpy()) for column in COLUMNS
         }
 
-        # index_in() is null for players outside the vocabulary; shifting by 1 makes those index 0 (unknown)
-        # pylint: disable=no-member
-        player_id = pc.add(
-            pc.fill_null(
-                pc.index_in(table["player_id"], value_set = player_lookup), -1
-            ), 1
-        )
-        # pylint: enable=no-member
+        if player_lookup is not None:
+            # pylint: disable=no-member
+            player_id = pc.add(
+                pc.fill_null(
+                    # sub 1 for the not found case, allowing these to be 0 and the actual 0 case to become non-zero ("pre-existing")
+                    pc.index_in(table["player_id"], value_set = player_lookup), -1
+                ), 1
+            )
+            # pylint: enable=no-member
 
-        columns["player_id"] = torch.tensor(player_id.to_numpy())
+            columns["player_id"] = torch.tensor(player_id.to_numpy())
 
         # Send the batch to the training code.
         yield columns
@@ -171,7 +163,7 @@ def walk_training_dataset(data_path, player_lookup, max_rows, section_rows, seed
 def merge_section(batches):
     """ Concatenates a list of column -> tensor batches into a single column -> tensor section """
     resolved_section = {}
-    for column in COLUMNS + ["player_id"]:
+    for column in batches[0]:
         column_batches = []
         for batch in batches:
             column_batches.append(batch[column])
@@ -187,7 +179,8 @@ def make_hand_index(columns):
     # Cards are numbered 0..51 as: rank * 4 + suit
     hole1 = columns["hole1"].long()
     hole2 = columns["hole2"].long()
-    rank1, rank2 = hole1 // 4, hole2 // 4
+    rank1 = hole1 // 4
+    rank2 = hole2 // 4
 
     # sort so the order of the two cards doesn't matter (A-K and K-A are the same hand)
     high = torch.maximum(rank1, rank2)
@@ -246,24 +239,17 @@ def make_features(columns):
     ], dim = 1)
 
 
-def add_player_features(features, player_id, n_players):
-    """ concats one-hot player columns """
-
-    # TODO: One-hot doesn't work with the full dataset, probably need a torch Embedding
-    player_one_hot = torch.nn.functional.one_hot(player_id.long(), num_classes = n_players).float() # pylint: disable=not-callable
-    return torch.cat((features, player_one_hot), dim = 1)
-
-
 class PreflopNet(torch.nn.Module):
-    """ Feed-forward network over the row features and a learned hand embedding """
+    """ Feed-forward network over the row features and learned hand and player embeddings """
 
-    def __init__(self, n_features, n_hands = 339, embed_dim = 8):
+    def __init__(self, n_features, n_players, n_hands = 339, hand_dim = 8, player_dim = 16):
         super().__init__()
-        self.hand_embedding = torch.nn.Embedding(n_hands, embed_dim)
+        self.hand_embedding = torch.nn.Embedding(n_hands, hand_dim)
+        self.player_embedding = torch.nn.Embedding(n_players, player_dim) if player_dim > 0 else None
 
         # Sequential for linear cxts - https://docs.pytorch.org/docs/2.15/generated/torch.nn.Sequential.html
         self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(n_features + embed_dim, 128),
+            torch.nn.Linear(n_features + hand_dim + player_dim, 128),
             torch.nn.ReLU(), # TODO: evaluate if ReLU is best/why
             torch.nn.Linear(128, 128),
             torch.nn.ReLU(),
@@ -274,9 +260,13 @@ class PreflopNet(torch.nn.Module):
             torch.nn.Linear(64, len(ACTION_NAMES)),
         )
 
-    def forward(self, features, hands):
-        """ Concatenates each row's hand embedding onto its features """
-        return self.mlp(torch.cat([features, self.hand_embedding(hands)], dim = 1))
+    def forward(self, features, hands, players = None):
+        """ Concatenates each row's hand embedding, and player embedding if enabled, onto its features """
+        inputs = [features, self.hand_embedding(hands)]
+        if self.player_embedding is not None:
+            inputs.append(self.player_embedding(players.long()))
+
+        return self.mlp(torch.cat(inputs, dim = 1))
 
 
 def print_example_hands(model):
@@ -291,29 +281,26 @@ def print_example_hands(model):
         "??": (-1, -1)
     }
 
-    n = len(sample_hands)
+    n_samples = len(sample_hands)
 
     # NOTE: .full((n,) ...) looks awkward but .full() expects a tuple or list and we only need 1D
     # https://docs.pytorch.org/docs/2.15/generated/torch.full.html
     columns = {
         "hole1": torch.tensor([hand[0] for hand in sample_hands.values()]),
         "hole2": torch.tensor([hand[1] for hand in sample_hands.values()]),
-        "seat": torch.full((n,), 2), # first player after sm/bb
-        "n_players": torch.full((n,), 6), # 6 players
-        "n_active": torch.full((n,), 6),
-        "n_raises": torch.zeros(n), # no raises
-        "big_blind": torch.ones(n),
-        "pot": torch.full((n,), 1.5), # just small + big blind
-        "to_call": torch.ones(n),
-        "stack": torch.full((n,), 100.0) # buy in default
+        "seat": torch.full((n_samples,), 2), # first player after sm/bb
+        "n_players": torch.full((n_samples,), 6), # 6 players
+        "n_active": torch.full((n_samples,), 6),
+        "n_raises": torch.zeros(n_samples), # no raises
+        "big_blind": torch.ones(n_samples),
+        "pot": torch.full((n_samples,), 1.5), # just small + big blind
+        "to_call": torch.ones(n_samples),
+        "stack": torch.full((n_samples,), 100.0) # buy in default
     }
 
     with torch.no_grad():
         # all sample hands belong to the unknown player (index 0)
-        sample_features = make_features(columns)
-        n_players = model.mlp[0].in_features - model.hand_embedding.embedding_dim - sample_features.shape[1]
-        sample_in = add_player_features(sample_features, torch.zeros(n), n_players)
-        probablities = model(sample_in, make_hand_index(columns)).softmax(dim = 1)
+        probablities = model(make_features(columns), make_hand_index(columns), torch.zeros(n_samples, dtype = torch.long)).softmax(dim = 1)
 
     print("\nSelect hands sample")
     print(f"\t{"hand":<5}" + "".join(f"{action:>8}" for action in ACTION_NAMES))
@@ -330,13 +317,16 @@ def main():
     torch.manual_seed(0) # fixed for now, could probably be an arg
     torch.set_num_threads(args.threads)
 
-    player_lookup = build_player_lookup(args.data_path, args.max_rows, args.seed)
-    print(f"# training players: {len(player_lookup):,}")
+    player_lookup = None
+    n_players = 0
+    if args.player_dim > 0:
+        player_lookup = build_player_lookup(args.data_path, args.max_rows, args.seed)
+        print(f"# training players: {len(player_lookup):,}")
 
-    # + 1 reserves index 0 for unknown/unseen players
-    n_players = len(player_lookup) + 1
+        # + 1 reserves index 0 for unknown/unseen players
+        n_players = len(player_lookup) + 1
 
-    model = PreflopNet(len(COLUMNS) + n_players)
+    model = PreflopNet(len(COLUMNS), n_players, player_dim = args.player_dim)
 
     # Tuning handler, Adam appears to just be the most common optimizer, can tune if noted to be a limiting factor
     # default lr is already 1e-3 (from lib: `float | Tensor = 1e-3`), specified it because we may want to tune this
@@ -350,15 +340,20 @@ def main():
                 continue
 
             train_in = make_features(columns)[train_subset]
-            train_players = columns["player_id"][train_subset]
+            train_players = columns["player_id"][train_subset] if player_lookup is not None else None
             train_hands = make_hand_index(columns)[train_subset]
             train_target = columns["action"][train_subset].long() # cross_entropy() requires long/byte, fails without
 
             # TODO: re-evaluate how many steps to split into once we ingest the full dataset, probably needs to be a function of N
             #     (Cole)
             for index in torch.randperm(len(train_target)).split(4000):
-                batch_in = add_player_features(train_in[index], train_players[index], n_players)
-                loss = torch.nn.functional.cross_entropy(model(batch_in, train_hands[index]), train_target[index])
+                batch_players = None
+                if train_players is not None:
+                    # establishing a base case for new/unknown players during testing; overriding ~1% of the samples for it
+                    batch_players = train_players[index].clone()
+                    batch_players[torch.rand(len(index)) < 0.01] = 0
+
+                loss = torch.nn.functional.cross_entropy(model(train_in[index], train_hands[index], batch_players), train_target[index])
                 optimizer.zero_grad()
                 loss.backward() # backprop
                 optimizer.step()
@@ -379,11 +374,7 @@ def main():
             test_in = make_features(test)
             test_hands = make_hand_index(test)
 
-            predictions = torch.cat([
-                model(add_player_features(test_in[index], test["player_id"][index], n_players), test_hands[index]).argmax(dim = 1)
-                for index in torch.arange(len(test_in)).split(4000)
-            ])
-
+            predictions = model(test_in, test_hands, test.get("player_id")).argmax(dim = 1)
             correct = predictions == test["action"].long()
             known = test["hole1"] >= 0 # -1 indicates unknown
 
