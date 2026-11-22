@@ -246,18 +246,29 @@ class PreflopNet(torch.nn.Module):
     def __init__(self, n_features, n_players, n_hands = 339, hand_dim = 8, player_dim = 16):
         super().__init__()
         self.hand_embedding = torch.nn.Embedding(n_hands, hand_dim)
-        self.player_embedding = torch.nn.Embedding(n_players, player_dim) if player_dim > 0 else None
+        self.player_embedding = torch.nn.Embedding(n_players, player_dim, sparse = True) if player_dim > 0 else None
 
         # Sequential for linear cxts - https://docs.pytorch.org/docs/2.15/generated/torch.nn.Sequential.html
+        # Why LeakyReLU? - https://medium.com/@rajamails19/from-relu-to-gelu-the-pytorch-activation-handbook-5579b682a3c9
+        # - Lightweight non-linearity
+        # - Helps the dead neuron case: ~9% with ReLU vs ~2% with LeakyReLU
+        #    - Accuracy was effectively unchanged, so this is essentially a cheap safeguard rather than a performance gain
+        # Why not an alternative like GELU or SiLU?
+        # - Neither showed a measurable benefit in this net (2M rows, 3 epochs, 3 seeds), and both trained slightly slower
+        #    - GELU is commonly used in deeper architectures like transformers. This model may move to one if it's extended to predict
+        #          later streets (not just the pre-flop), where action sequences matter.
+        #    - SiLU is commonly used in deep CNNs, where smoother gradients help more. It also had
+        #          slightly worse test loss here.
+
         self.mlp = torch.nn.Sequential(
             torch.nn.Linear(n_features + hand_dim + player_dim, 128),
-            torch.nn.ReLU(), # TODO: evaluate if ReLU is best/why
+            torch.nn.LeakyReLU(),
             torch.nn.Linear(128, 128),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.Linear(128, 128),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.Linear(128, 64),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.Linear(64, len(ACTION_NAMES)),
         )
 
@@ -329,9 +340,22 @@ def main():
 
     model = PreflopNet(len(COLUMNS), n_players, player_dim = args.player_dim)
 
-    # Tuning handler, Adam appears to just be the most common optimizer, can tune if noted to be a limiting factor
-    # default lr is already 1e-3 (from lib: `float | Tensor = 1e-3`), specified it because we may want to tune this
-    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+    # Why Adam?
+    # - Smoothes out noisy mini-batch gradients
+    # - Per-weight adaptive step sizes suit our mix of scaled features and embeddings, and doesn't need tuning
+    # - We don't need decay
+    dense_parameters = [parameter for name, parameter in model.named_parameters() if not name.startswith("player_embedding")]
+    optimizers = [torch.optim.Adam(dense_parameters)]
+
+    # Why SparseAdam for the player embedding?
+    # - only need to touch the players in the current batch; std Adam updates every player's vector
+    # - Adam's cost is per step, so it grows quickly with smaller batch sizes (more steps per epoch)
+    #    - Estimated full-vocab epoch: ~10 -> ~4 min at batch size 4000, ~30 -> ~5 min at batch size 1000
+    # - players not in a batch no longer drift on leftover momentum
+    # Why not use it for everything..?
+    # - The rest of the network has dense gradients, which SparseAdam doesn't support
+    if model.player_embedding is not None:
+        optimizers.append(torch.optim.SparseAdam(model.player_embedding.parameters()))
 
     for epoch in range(args.epochs):
         for columns in walk_training_dataset(args.data_path, player_lookup, args.max_rows, args.section_rows, args.seed):
@@ -353,10 +377,21 @@ def main():
                     batch_players = train_players[index].clone()
                     batch_players[torch.rand(len(index)) < 0.01] = 0
 
+                # Why cross-entropy? (looking for balanced classifications)
+                # - Lowest loss comes from matching the true action probabilities, which suits modeling how humans mix actions
+                # - corrects confident mistakes strongly when paired with softmax
+                # Why not an alternative like class weights, focal loss, or MSE?
+                # - class weights & focal loss handle imbalance by distorting the probabilities we're trying to learn
+                # - MSE penalizes confident mistakes less and typically trains slowly on softmax outputs
                 loss = torch.nn.functional.cross_entropy(model(train_in[index], train_hands[index], batch_players), train_target[index])
-                optimizer.zero_grad()
+
+                for optimizer in optimizers:
+                    optimizer.zero_grad()
+
                 loss.backward() # backprop
-                optimizer.step()
+
+                for optimizer in optimizers:
+                    optimizer.step() # next
 
         print(f"epoch {epoch + 1}/{args.epochs}")
 
