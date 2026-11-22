@@ -369,7 +369,6 @@ def main():
             train_hands = make_hand_index(columns)[train_subset]
             train_target = columns["action"][train_subset].long() # cross_entropy() requires long/byte, fails without
 
-            # TODO: determine what makes a good batch size
             for index in torch.randperm(len(train_target)).split(args.train_batch_size):
                 batch_players = None
                 if train_players is not None:
