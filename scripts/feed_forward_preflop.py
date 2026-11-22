@@ -17,6 +17,7 @@ Basic usage:
 # std libs
 import sys
 import random
+from time import time
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -42,6 +43,17 @@ ROW_FILTERS = (
 # pylint: enable=no-member
 
 ##### funcs ####################
+
+def timer(func):
+    """ Generic decorator for funcs that use return (not yield) """
+    def executor(*args, **kwargs):
+        start_time = time()
+        result = func(*args, **kwargs)
+        print(f"`{func.__name__}()` took {time() - start_time:.2f}s")
+        return result
+    return executor
+
+
 def get_args():
     """ Argparser retrieval """
 
@@ -57,6 +69,7 @@ def get_args():
     parser.add_argument("--player_dim", type = int, help = "player embedding size, 0 disables player IDs", default = 16)
 
     return parser.parse_args()
+
 
 def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed = 0, read_players = True):
     """ Reads pre-flop data in batches and yields filtered Arrow tables """
@@ -320,6 +333,7 @@ def print_example_hands(model):
         print(f"\t{hand:<5}" + "".join(f"{prob:>8.2f}" for prob in hand_probabilities.tolist()))
 
 
+@timer
 def main():
     """ main driver - loads, trains, & reports """
     # TODO: convert most of this to a proper class structure, this isn't great
