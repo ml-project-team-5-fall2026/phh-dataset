@@ -50,6 +50,7 @@ def get_args():
     parser.add_argument("--data_path", type = Path, help = "path to the decisions parquet table", default = Path("parquet/decisions"))
     parser.add_argument("--max_rows", type = int, help = "total pre-flop rows to read", default = None)
     parser.add_argument("--section_rows", type = int, help = "max pre-flop rows held in memory and shuffled together", default = 5000000)
+    parser.add_argument("--train_batch_size", type = int, help = "rows per training step", default = 4000)
     parser.add_argument("--epochs", type = int, help = "dataset iterations", default = 3)
     parser.add_argument("--threads", type = int, help = "torch threads", default = 2) # 2 seems to be safe on the VMs
     parser.add_argument("--seed", type = int, help = "randomization seed", default = 0)
@@ -344,9 +345,8 @@ def main():
             train_hands = make_hand_index(columns)[train_subset]
             train_target = columns["action"][train_subset].long() # cross_entropy() requires long/byte, fails without
 
-            # TODO: re-evaluate how many steps to split into once we ingest the full dataset, probably needs to be a function of N
-            #     (Cole)
-            for index in torch.randperm(len(train_target)).split(4000):
+            # TODO: determine what makes a good batch size
+            for index in torch.randperm(len(train_target)).split(args.train_batch_size):
                 batch_players = None
                 if train_players is not None:
                     # establishing a base case for new/unknown players during testing; overriding ~1% of the samples for it
