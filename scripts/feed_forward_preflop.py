@@ -181,6 +181,25 @@ def merge_section(batches):
     return resolved_section
 
 
+def make_hand_index(columns):
+    """ Turns the two hole cards into one integer ID for the hand embedding """
+
+    # Cards are numbered 0..51 as: rank * 4 + suit
+    hole1 = columns["hole1"].long()
+    hole2 = columns["hole2"].long()
+    rank1, rank2 = hole1 // 4, hole2 // 4
+
+    # sort so the order of the two cards doesn't matter (A-K and K-A are the same hand)
+    high = torch.maximum(rank1, rank2)
+    low = torch.minimum(rank1, rank2)
+    suited = ((hole1 % 4) == (hole2 % 4)).long()
+
+    index = high * 26 + low * 2 + suited
+
+    # hidden cards are stored as -1, and use the special ID 338
+    return torch.where(hole1 >= 0, index, torch.full_like(index, 338))
+
+
 def make_features(columns):
     """ Raw decision columns -> (rows, 12) float tensor """
 
@@ -235,6 +254,31 @@ def add_player_features(features, player_id, n_players):
     return torch.cat((features, player_one_hot), dim = 1)
 
 
+class PreflopNet(torch.nn.Module):
+    """ Feed-forward network over the row features and a learned hand embedding """
+
+    def __init__(self, n_features, n_hands = 339, embed_dim = 8):
+        super().__init__()
+        self.hand_embedding = torch.nn.Embedding(n_hands, embed_dim)
+
+        # Sequential for linear cxts - https://docs.pytorch.org/docs/2.15/generated/torch.nn.Sequential.html
+        self.mlp = torch.nn.Sequential(
+            torch.nn.Linear(n_features + embed_dim, 128),
+            torch.nn.ReLU(), # TODO: evaluate if ReLU is best/why
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, len(ACTION_NAMES)),
+        )
+
+    def forward(self, features, hands):
+        """ Concatenates each row's hand embedding onto its features """
+        return self.mlp(torch.cat([features, self.hand_embedding(hands)], dim = 1))
+
+
 def print_example_hands(model):
     """ Sanity check/hand samples: first to act in a 6 player game, nobody has raised, 100 big blind stacks """
 
@@ -249,7 +293,7 @@ def print_example_hands(model):
 
     n = len(sample_hands)
 
-    # NOTE: .full((n,) ...) looks awkward but full expects a tuple or list and we only need 1D
+    # NOTE: .full((n,) ...) looks awkward but .full() expects a tuple or list and we only need 1D
     # https://docs.pytorch.org/docs/2.15/generated/torch.full.html
     columns = {
         "hole1": torch.tensor([hand[0] for hand in sample_hands.values()]),
@@ -267,8 +311,9 @@ def print_example_hands(model):
     with torch.no_grad():
         # all sample hands belong to the unknown player (index 0)
         sample_features = make_features(columns)
-        n_players = model[0].in_features - sample_features.shape[1]
-        probablities = model(add_player_features(sample_features, torch.zeros(n), n_players)).softmax(dim = 1)
+        n_players = model.mlp[0].in_features - model.hand_embedding.embedding_dim - sample_features.shape[1]
+        sample_in = add_player_features(sample_features, torch.zeros(n), n_players)
+        probablities = model(sample_in, make_hand_index(columns)).softmax(dim = 1)
 
     print("\nSelect hands sample")
     print(f"\t{"hand":<5}" + "".join(f"{action:>8}" for action in ACTION_NAMES))
@@ -291,14 +336,7 @@ def main():
     # + 1 reserves index 0 for unknown/unseen players
     n_players = len(player_lookup) + 1
 
-    # Sequential for linear cxts - https://docs.pytorch.org/docs/2.15/generated/torch.nn.Sequential.html
-    model = torch.nn.Sequential(
-        torch.nn.Linear(len(COLUMNS) + n_players, 64),
-        torch.nn.ReLU(), # pretty much just using the most common features (which the above source uses), ReLU happens to be suitable for this application
-        torch.nn.Linear(64, 64),
-        torch.nn.ReLU(),
-        torch.nn.Linear(64, len(ACTION_NAMES)),
-    )
+    model = PreflopNet(len(COLUMNS) + n_players)
 
     # Tuning handler, Adam appears to just be the most common optimizer, can tune if noted to be a limiting factor
     # default lr is already 1e-3 (from lib: `float | Tensor = 1e-3`), specified it because we may want to tune this
@@ -313,13 +351,14 @@ def main():
 
             train_in = make_features(columns)[train_subset]
             train_players = columns["player_id"][train_subset]
+            train_hands = make_hand_index(columns)[train_subset]
             train_target = columns["action"][train_subset].long() # cross_entropy() requires long/byte, fails without
 
             # TODO: re-evaluate how many steps to split into once we ingest the full dataset, probably needs to be a function of N
             #     (Cole)
             for index in torch.randperm(len(train_target)).split(4000):
                 batch_in = add_player_features(train_in[index], train_players[index], n_players)
-                loss = torch.nn.functional.cross_entropy(model(batch_in), train_target[index])
+                loss = torch.nn.functional.cross_entropy(model(batch_in, train_hands[index]), train_target[index])
                 optimizer.zero_grad()
                 loss.backward() # backprop
                 optimizer.step()
@@ -338,9 +377,10 @@ def main():
 
             test = {column: values[test_subset] for column, values in columns.items()}
             test_in = make_features(test)
+            test_hands = make_hand_index(test)
 
             predictions = torch.cat([
-                model(add_player_features(test_in[index], test["player_id"][index], n_players)).argmax(dim = 1)
+                model(add_player_features(test_in[index], test["player_id"][index], n_players), test_hands[index]).argmax(dim = 1)
                 for index in torch.arange(len(test_in)).split(4000)
             ])
 
