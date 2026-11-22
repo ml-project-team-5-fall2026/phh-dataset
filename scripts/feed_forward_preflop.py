@@ -46,7 +46,7 @@ from argparse import ArgumentParser
 import torch
 import pyarrow as pa
 import pyarrow.compute as pc
-import pyarrow.parquet as pq
+import pyarrow.dataset as ds
 
 ##### constants ####################
 ACTION_NAMES = ["fold", "call", "raise"]
@@ -88,17 +88,19 @@ def stream_preflop_tables(data_path, max_rows = None, batch_size = 65536, seed =
     random.Random(seed).shuffle(files)
 
     for path in files:
-        parquet_file = pq.ParquetFile(path)
-        for batch in parquet_file.iter_batches(
-            batch_size=batch_size,
-            columns=COLUMNS + ["street", "player_id"] # adding street for pre-flop filtering
-        ):
-            table = pa.Table.from_batches([batch])
-            table = table.filter(ROW_FILTERS)
+        dataset = ds.dataset(path, format = "parquet")
+        scanner = dataset.scanner(
+            columns = COLUMNS + ["player_id"],
+            filter = ROW_FILTERS,
+            batch_size = batch_size
+        )
 
+        for batch in scanner.to_batches():
             # Skip batches that contain no valid pre-flop rows
-            if table.num_rows == 0:
+            if batch.num_rows == 0:
                 continue
+
+            table = pa.Table.from_batches([batch])
 
             if max_rows is not None:
                 remaining = max_rows - n_rows
