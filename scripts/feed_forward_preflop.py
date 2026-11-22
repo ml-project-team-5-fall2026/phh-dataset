@@ -16,21 +16,9 @@ Basic usage:
 
 ##### other TODOs ####################
 # TODO: not attached to any one part of the code, just improvements to make:
-# Infer hidden cards based on current representation distributions and what action the player took for better training quality.
-#     most significantly, need to unroll the unknown's fold rates back into the weaker hands
-#     (Kristian)
-#
 # Use an alternative hand encoding that better represents how strong the hands are sensitive to how people play them.
 #     lets the model learn card strengths based on how people play rather than the mathematical significance
 #     (Surja)
-#
-# Use all of the data, stream the rows instead of loading it all into memory.
-#     should make this optional, so we can test with a smaller sample to get the other features implemented first
-#     (Cole)
-#
-# Include player IDs into the decisions/ table and model learning
-#     think this would be useful as a PoC that it can adapt to new players/data with non-traditional behavior
-#     (Kirsten)
 #
 # More hidden layers & epochs
 #     (Surja)
@@ -233,8 +221,6 @@ def make_features(columns):
         # dividing to get the chip values as a relation to the big blind; idea from Cole
         # log1p is essentially "safe log" for the 0 case; using log to prevent the inevitable squish the same divising factor logic from before would provide
         #   since the vast majority of values in this dataset are less than the big blind, outliers would result in strong biases'
-        # TODO: should test other normalization strategies to see if those make a significant difference
-        #     (Kristian - deprioritized)
         torch.log1p(columns["pot"] / big_blind),
         torch.log1p(columns["to_call"] / big_blind),
         torch.log1p(columns["stack"] / big_blind),
