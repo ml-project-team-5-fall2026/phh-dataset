@@ -458,7 +458,7 @@ class PreflopEvaluator:
         self.dataset = dataset
 
 
-    def evaluate_model(self):
+    def evaluate_model(self) -> AccuracyTracker:
         """ Returns an AccuracyTracker over the test rows """
 
         metrics = AccuracyTracker()
@@ -482,7 +482,7 @@ class PreflopEvaluator:
         return metrics
 
 
-    def print_example_hands(self, sample_hands):
+    def print_example_hands(self, sample_hands: dict[str, tuple[int, int]]) -> None:
         """ Sanity check/hand samples: first to act in a 6 player game, nobody has raised, 100 big blind stacks """
 
         if not sample_hands:
