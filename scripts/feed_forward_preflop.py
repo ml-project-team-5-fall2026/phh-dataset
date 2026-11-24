@@ -75,12 +75,28 @@ def get_args() -> Namespace:
 
 
 def is_train_row(hand_ids: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
-    """ Checks if we are looking at a training row or not """
+    """
+    Checks if we are looking at a training row or not
+
+    Parameters:
+        hand_ids: hand IDs from the dataset
+
+    Returns:
+        boolean mask; ~9 in 10, subject to ID stop ranges
+    """
     return hand_ids % 10 != 0
 
 
 def make_hand_index(columns: dict[str, torch.Tensor]) -> torch.Tensor:
-    """ Turns the two hole cards into one integer ID for the hand embedding """
+    """
+    Turns the hole cards into an int ID for the hand embedding
+
+    Parameters:
+        columns: decision columns, needs hole1 and hole2
+
+    Returns:
+        Hand ID per row
+    """
 
     # Cards are numbered 0..51 as: rank * 4 + suit
     hole1 = columns["hole1"].long()
@@ -100,7 +116,15 @@ def make_hand_index(columns: dict[str, torch.Tensor]) -> torch.Tensor:
 
 
 def make_features(columns: dict[str, torch.Tensor]) -> torch.Tensor:
-    """ Raw decision columns -> (rows, 12) float tensor """
+    """
+    Raw decision columns -> feature float tensor
+
+    Parameters:
+        columns: the interesting decision columns
+
+    Returns:
+        Card, table, and chip features per row; scaled if needed
+    """
 
     # in-house ref for card encodings:
     #   rank * 4 + suit
@@ -174,7 +198,15 @@ class PokerDataset:
             print(f"# training players: {len(self.player_lookup):,}")
 
     def stream_batches(self, batch_size: int = 65536) -> Iterator[dict[str, torch.Tensor]]:
-        """ Yields pre-flop batches as column -> tensor dicts, with players encoded when the lookup exists """
+        """
+        Yields pre-flop batches as column -> tensor dicts
+
+        Parameters:
+            batch_size: max rows per scanned batch
+
+        Yields:
+            Column -> tensor batch
+        """
 
         for table in self._stream_tables(batch_size, read_players = self.player_lookup is not None):
             # Convert the current batch to PyTorch tensors
@@ -199,7 +231,16 @@ class PokerDataset:
 
 
     def _stream_tables(self, batch_size: int = 65536, read_players: bool = True) -> Iterator[pa.Table]:
-        """ Reads pre-flop data in batches and yields filtered Arrow tables """
+        """
+        Reads pre-flop data in batches and yields filtered Arrow tables
+
+        Parameters:
+            batch_size: max rows per scanned batch
+            read_players: flag to read the player_id column
+
+        Yields:
+            A filtered table
+        """
 
         n_rows = 0
         files = sorted(self.data_path.rglob("*.parquet"))
@@ -241,7 +282,12 @@ class PokerDataset:
 
 
     def _build_player_lookup(self) -> pa.StringArray:
-        """ Sorted Arrow array of player IDs seen in training rows only, so test players can't leak into the vocabulary """
+        """
+        Sorted Arrow array of player IDs seen in training rows only, so test players can't leak into the vocabulary
+
+        Returns:
+            Unique & valid player IDs
+        """
 
         players = set()
         for table in self._stream_tables():
@@ -257,6 +303,9 @@ class PokerDataset:
         """
         Groups streamed batches into larger sections for better randomization in training.
         Inobvious here as to why, but it's relevant for the training `randperm()` call.
+
+        Yields:
+            Column -> tensor section of at least section_rows rows
         """
 
         batches = []
@@ -278,7 +327,15 @@ class PokerDataset:
 
     @staticmethod
     def _merge_section(batches: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
-        """ Concatenates a list of column -> tensor batches into a single column -> tensor section """
+        """
+        Concatenates a list of column -> tensor batches into a single column -> tensor section
+
+        Parameters:
+            batches: list of batches sharing the same columns
+
+        Returns:
+            The merged section
+        """
 
         resolved_section = {}
         for column in batches[0]:
@@ -333,7 +390,18 @@ class PreflopNet(torch.nn.Module):
 
 
     def forward(self, features: torch.Tensor, hands: torch.Tensor, players: torch.Tensor | None = None) -> torch.Tensor:
-        """ Concatenates each row's hand embedding, and player embedding if enabled, onto its features """
+        """
+        Concatenates each row's hand embedding, and player embedding if enabled, onto its features
+
+        Parameters:
+            features: feature tensor from make_features
+            hands: hand IDs
+            players: encoded player IDs
+
+        Returns:
+            logits for fold, call, and raise
+        """
+
         inputs = [features, self.hand_embedding(hands)]
         if self.player_embedding is not None:
             inputs.append(self.player_embedding(players.long()))
@@ -354,7 +422,12 @@ class PreflopTraining:
 
 
     def _setup_optimizers(self) -> list[torch.optim.Optimizer]:
-        """ Adam for the dense network, SparseAdam for the player embedding """
+        """
+        Adam for the dense network, SparseAdam for the player embedding (if it's enabled)
+
+        Returns:
+            Torch optimizer(s)
+        """
 
         # Why Adam?
         # - Smoothes out noisy mini-batch gradients
@@ -377,14 +450,19 @@ class PreflopTraining:
 
 
     def run_training(self, epochs: int) -> None:
-        """ Trains over every section of the dataset for each epoch """
+        """
+        Trains over the supplied portion of the dataset
+
+        Parameters:
+            epochs: # of full passes over the dataset
+        """
 
         for epoch in range(epochs):
             for columns in self.dataset.stream_sections():
                 # keeping a subset for training only, inverse logic done later for testing so we can use the same row boundaries
                 train_subset = is_train_row(columns["hand_id"])
                 if not train_subset.any():
-                    return
+                    continue
 
                 train_in = make_features(columns)[train_subset]
                 train_players = columns["player_id"][train_subset] if self.dataset.player_lookup is not None else None
@@ -406,7 +484,15 @@ class PreflopTraining:
     def _take_next_training_step(
         self, features: torch.Tensor, hands: torch.Tensor, players: torch.Tensor | None, target: torch.Tensor
     ) -> None:
-        """ One forward pass, backprop, and optimizer update """
+        """
+        One forward pass, backprop, and optimizer update
+
+        Parameters:
+            features: feature tensor
+            hands: hand IDs
+            players: encoded player IDs
+            target: target output
+        """
 
         # Why cross-entropy? (looking for balanced classifications)
         # - Lowest loss comes from matching the true action probabilities, which suits modeling how humans mix actions
@@ -440,7 +526,14 @@ class AccuracyTracker:
 
 
     def update_accuracy_counts(self, n_correct: torch.Tensor, known: torch.Tensor) -> None:
-        """ Adds one batch of results """
+        """
+        Adds one batch of results
+
+        Parameters:
+            n_correct: bool tensor, True where the prediction was correct, serves as a counter
+            known: bool tensor, True where the hole cards are known
+        """
+
         self._update_individual_count("combined", n_correct)
         self._update_individual_count("cards_known", n_correct[known])
         self._update_individual_count("cards_unknown", n_correct[~known])
@@ -448,12 +541,14 @@ class AccuracyTracker:
 
     def _update_individual_count(self, name: str, n_correct: torch.Tensor) -> None:
         """ Adds a boolean tensor of per-row results to one group """
+
         self.hit_counts[name] += n_correct.sum().item()
         self.total_counts[name] += len(n_correct)
 
 
     def print_accuracy(self) -> None:
         """ Prints the results table """
+
         print(f"\n{"test results":<14}{"rows":>12}{"accuracy":>10}")
         for name, hit_count in self.hit_counts.items():
             print(f"{name:<14}{self.total_counts[name]:>12,}{hit_count / max(self.total_counts[name], 1):>10.3f}")
@@ -468,7 +563,12 @@ class PreflopEvaluator:
 
 
     def evaluate_model(self) -> AccuracyTracker:
-        """ Returns an AccuracyTracker over the test rows """
+        """
+        Runs the model over the test rows without tracking gradients
+
+        Returns:
+            Metrics container with the current result state
+        """
 
         metrics = AccuracyTracker()
 
@@ -492,7 +592,12 @@ class PreflopEvaluator:
 
 
     def print_example_hands(self, sample_hands: dict[str, tuple[int, int]]) -> None:
-        """ Sanity check/hand samples: first to act in a 6 player game, nobody has raised, 100 big blind stacks """
+        """
+        Runs a sanity check on a select sample of hands
+
+        Parameters:
+            sample_hands: dict of hole cards to test
+        """
 
         if not sample_hands:
             print("No sample hands given, skipping example...")
