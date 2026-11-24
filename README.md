@@ -33,9 +33,13 @@ Can also run on `--data_path parquet/` if it was generated.
 
 ---
 
-train_preflop.py to train a torch network that predicts pre-flop actions (fold, call, raise) from the Parquet decisions table, basic usage is:
+feed_forward_preflop.py to train a torch network that predicts pre-flop actions (fold, call, raise) from the Parquet decisions table, basic usage is:
 
-> ./scripts/train_preflop.py --data_path parquet/decisions
+> ./scripts/feed_forward_preflop.py
+
+Or open the `_jupyter` equivalent.
+
+---
 
 If you don't have an NVIDIA GPU, install the smaller CPU-only torch build first:
 
